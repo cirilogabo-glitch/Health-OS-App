@@ -1,115 +1,106 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { 
-  CheckCircle2, Circle, Camera, TrendingDown, 
-  Activity, Scale, Zap, AlertCircle, RefreshCw 
-} from 'lucide-react';
-
-const API_URL = "https://script.google.com/macros/s/AKfycbyGlisGgRC3iWeKFeUFj12t-vBKIKjQlUdXVMX67eHFbX9_LTZZ3MsyMcGyqm5kdVxbWw/exec";
+import { CheckCircle2, Circle, Camera, Zap, Activity, Scale, AlertCircle, Clock } from 'lucide-react';
 
 const ROUTINE_ITEMS = [
-  { id: 'rybelsus', time: '06:00', label: 'Rybelsus 1.5mg', subtext: '120ml water, stay upright', icon: '💊', kcal: 0, pro: 0 },
-  { id: 'b12', time: '07:00', label: 'B12 Sublingual', subtext: 'Active Methylcobalamin', icon: '⚡', kcal: 0, pro: 0 },
-  { id: 'lmnt', time: '11:00', label: 'LMNT + 10g Collagen', subtext: 'Electrolytes + Peptides', icon: '💧', kcal: 40, pro: 10 },
-  { id: 'huel', time: '13:00', label: 'Huel Black + 10g Collagen', subtext: 'Fuel + Multi Essentials', icon: '🥤', kcal: 440, pro: 50 },
-  { id: 'dinner', time: '17:30', label: 'Dinner (Lean Protein)', subtext: 'Check Green List', icon: '🍽️', kcal: 0, pro: 0 },
-  { id: 'magnesium', time: '21:00', label: 'Magnesium Glycinate', subtext: 'Calm & Recovery', icon: '🌙', kcal: 0, pro: 0 },
+  { id: 'rybelsus', time: '06:00', label: 'Rybelsus 1.5mg', icon: '💊', macros: { kcal: 0, pro: 0 } },
+  { id: 'b12', time: '07:00', label: 'B12 Sublingual', icon: '⚡', macros: { kcal: 0, pro: 0 } },
+  { id: 'lmnt', time: '11:00', label: 'LMNT + Collagen', icon: '💧', macros: { kcal: 40, pro: 10 } },
+  { id: 'huel', time: '13:00', label: 'Huel + Collagen', icon: '🥤', macros: { kcal: 440, pro: 50 } },
+  { id: 'dinner', time: '17:30', label: 'Dinner (Lean)', icon: '🍽️', macros: null },
+  { id: 'magnesium', time: '21:00', label: 'Magnesium', icon: '🌙', macros: { kcal: 0, pro: 0 } },
 ];
 
 const TARGETS = { kcal: 1300, pro: 140 };
 
-function App() {
+const App = () => {
   const [activeTab, setActiveTab] = useState('routine');
-  const [dailyStatus, setDailyStatus] = useState(new Array(6).fill(false));
-  const [weight, setWeight] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [dailyData, setDailyData] = useState({});
+  const [loading, setLoading] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      const response = await fetch(API_URL);
-      const data = await response.json();
-      setDailyStatus(data.checks || []);
-      setWeight(data.latestWeight || 0);
-      setLoading(false);
-    } catch (e) { console.error(e); setLoading(false); }
+  const toggleItem = (id) => {
+    setDailyData(prev => ({ ...prev, [id]: !prev[id] }));
+    // API Call to Google Sheet would go here
   };
 
-  useEffect(() => { fetchData(); }, []);
-
-  const toggleItem = async (id, index) => {
-    const newStatus = [...dailyStatus];
-    newStatus[index] = !newStatus[index];
-    setDailyStatus(newStatus);
-    await fetch(API_URL, { method: 'POST', body: JSON.stringify({ id, value: newStatus[index] }) });
-  };
-
-  const totals = ROUTINE_ITEMS.reduce((acc, item, i) => {
-    if (dailyStatus[i]) { acc.kcal += item.kcal; acc.pro += item.pro; }
+  const totals = ROUTINE_ITEMS.reduce((acc, item) => {
+    if (dailyData[item.id] && item.macros) {
+      acc.kcal += item.macros.kcal;
+      acc.pro += item.macros.pro;
+    }
     return acc;
   }, { kcal: 0, pro: 0 });
 
-  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-blue-500 font-black">HEALTH OS LOADING...</div>;
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 font-sans">
-      <header className="p-6 pt-12">
-        <h1 className="text-3xl font-black italic tracking-tighter uppercase">{activeTab}</h1>
-        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-1">Protocol 2026 • Accelerated</p>
+    <div className="min-h-screen bg-[#05070a] text-slate-100 font-sans pb-24 overflow-hidden">
+      {/* Slim Header */}
+      <header className="p-5 pt-8 flex justify-between items-end">
+        <div>
+          <h1 className="text-xl font-black tracking-tighter italic">HEALTH OS</h1>
+          <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">Protocol 2026 • Accelerated</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-slate-500 font-bold uppercase">{new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</p>
+        </div>
       </header>
 
-      {activeTab === 'routine' ? (
-        <main className="px-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-slate-900 p-4 rounded-3xl border border-slate-800">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Energy</span>
-              <div className="text-xl font-black italic">{totals.kcal} <span className="text-[10px] not-italic text-slate-600">/ {TARGETS.kcal}</span></div>
-            </div>
-            <div className="bg-slate-900 p-4 rounded-3xl border border-slate-800">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Protein</span>
-              <div className="text-xl font-black italic">{totals.pro}g <span className="text-[10px] not-italic text-slate-600">/ {TARGETS.pro}g</span></div>
-            </div>
+      {/* Condensed Progress Section */}
+      <section className="px-5 mb-6 grid grid-cols-2 gap-2">
+        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-2xl">
+          <div className="flex justify-between text-[9px] font-black uppercase text-slate-500 mb-1">
+            <span>Energy</span>
+            <span className={totals.kcal > TARGETS.kcal ? "text-red-400" : "text-blue-400"}>{totals.kcal}/{TARGETS.kcal}</span>
           </div>
+          <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${(totals.kcal/TARGETS.kcal)*100}%` }} />
+          </div>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-2xl">
+          <div className="flex justify-between text-[9px] font-black uppercase text-slate-500 mb-1">
+            <span>Protein</span>
+            <span className="text-emerald-400">{totals.pro}g/{TARGETS.pro}g</span>
+          </div>
+          <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(totals.pro/TARGETS.pro)*100}%` }} />
+          </div>
+        </div>
+      </section>
 
-          {ROUTINE_ITEMS.map((item, i) => (
-            <button key={item.id} onClick={() => toggleItem(item.id, i)} className={`w-full flex items-center gap-4 p-4 rounded-3xl border transition-all ${dailyStatus[i] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-800'}`}>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl ${dailyStatus[i] ? 'bg-emerald-500/20' : 'bg-slate-800'}`}>{item.icon}</div>
-              <div className="text-left flex-1">
-                <div className="text-[10px] font-black text-blue-500 uppercase">{item.time}</div>
-                <div className="font-bold text-sm">{item.label}</div>
-                <div className="text-[10px] text-slate-500 font-medium">{item.subtext}</div>
+      {/* Optimized List */}
+      <section className="px-5 space-y-1.5">
+        {ROUTINE_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => toggleItem(item.id)}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+              dailyData[item.id] ? 'bg-emerald-500/5 border-emerald-500/20 shadow-none' : 'bg-slate-900/40 border-slate-800 shadow-sm'
+            }`}
+          >
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${dailyData[item.id] ? 'bg-emerald-500/20' : 'bg-slate-800'}`}>
+              {item.icon}
+            </div>
+            <div className="flex-1 text-left">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-black italic ${dailyData[item.id] ? 'text-emerald-500' : 'text-blue-500'}`}>{item.time}</span>
+                <h3 className={`text-sm font-bold ${dailyData[item.id] ? 'text-slate-500' : 'text-white'}`}>{item.label}</h3>
               </div>
-              {dailyStatus[i] ? <CheckCircle2 className="text-emerald-500" size={20} /> : <Circle className="text-slate-800" size={20} />}
-            </button>
-          ))}
-          
-          <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl flex gap-3">
-            <AlertCircle className="text-amber-500 shrink-0" size={18} />
-            <p className="text-[10px] text-amber-200/70 font-medium leading-tight">
-              Stay upright for 60 mins after Rybelsus. Target: 125-140g protein daily[cite: 1].
-            </p>
-          </div>
-        </main>
-      ) : (
-        <main className="px-6 text-center pt-10">
-          <div className="bg-slate-900 rounded-full w-56 h-56 mx-auto flex flex-col items-center justify-center border-4 border-blue-500/10 shadow-2xl">
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Weight Log</span>
-            <div className="text-6xl font-black italic">{weight}</div>
-            <span className="text-sm font-bold text-slate-500">KG</span>
-          </div>
-          <p className="mt-8 text-slate-500 text-xs font-black uppercase tracking-widest">Goal: 69.0 KG[cite: 3]</p>
-        </main>
-      )}
+            </div>
+            {dailyData[item.id] ? <CheckCircle2 className="text-emerald-500" size={18} /> : <Circle className="text-slate-800" size={18} />}
+          </button>
+        ))}
+      </section>
 
-      <nav className="fixed bottom-0 left-0 right-0 h-20 bg-slate-950/90 backdrop-blur-xl border-t border-slate-900 flex justify-around items-center px-12">
-        <button onClick={() => setActiveTab('routine')} className={activeTab === 'routine' ? 'text-blue-500' : 'text-slate-700'}>
-          <CheckCircle2 size={28} strokeWidth={3} />
-        </button>
-        <button onClick={() => setActiveTab('performance')} className={activeTab === 'performance' ? 'text-blue-500' : 'text-slate-700'}>
-          <Scale size={28} strokeWidth={3} />
-        </button>
+      {/* Floating Action Button for Dinner Photo */}
+      <button className="fixed bottom-24 right-6 w-14 h-14 bg-blue-600 rounded-full shadow-2xl flex items-center justify-center text-white active:scale-90 transition-transform z-40 border-4 border-slate-950">
+        <Camera size={24} />
+      </button>
+
+      {/* Navigation */}
+      <nav className="fixed bottom-0 inset-x-0 h-20 bg-slate-950/80 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center px-10 pb-4">
+        <button onClick={() => setActiveTab('routine')} className={activeTab === 'routine' ? "text-blue-500" : "text-slate-600"}><Clock size={22} /></button>
+        <button onClick={() => setActiveTab('weight')} className={activeTab === 'weight' ? "text-blue-500" : "text-slate-600"}><Scale size={22} /></button>
       </nav>
     </div>
   );
-}
+};
 
-ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+export default App;
