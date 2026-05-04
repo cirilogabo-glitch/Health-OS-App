@@ -8,13 +8,11 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        // PASTE YOUR GOOGLE SCRIPT URL HERE
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbznWZi5pZltPamYaNVhSJKSuc0gU_L9aw2FOhfF-em5SToK6JejcOIH4f-U2mB6_c3yIw/exec";
-    </script>
     <style>
-        body { background-color: #05070a; -webkit-tap-highlight-color: transparent; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
+        body { background-color: #05070a; color: #f8fafc; font-family: sans-serif; overflow: hidden; }
+        .active-glow { box-shadow: 0 0 15px rgba(16, 185, 129, 0.1); }
+        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .loading-pulse { animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     </style>
 </head>
 <body>
@@ -22,45 +20,71 @@
 
     <script type="text/babel">
         const { useState, useEffect } = React;
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbznWZi5pZltPamYaNVhSJKSuc0gU_L9aw2FOhfF-em5SToK6JejcOIH4f-U2mB6_c3yIw/exec";
 
-        const ROUTINE = [
-            { id: 'rybelsus', time: '06:00', label: 'Rybelsus 1.5mg', sub: 'Stay upright 60m', icon: '💊', kcal: 0, pro: 0 },
+        const PROTOCOL = [
+            { id: 'rybelsus', time: '06:00', label: 'Rybelsus 1.5mg', sub: '60m Fast • Upright', icon: '💊', kcal: 0, pro: 0 },
             { id: 'b12', time: '07:00', label: 'B12 Sublingual', sub: 'Methylcobalamin', icon: '⚡', kcal: 0, pro: 0 },
-            { id: 'lmnt', time: '11:00', label: 'LMNT + Collagen', sub: '1g Sodium + Protein', icon: '💧', kcal: 40, pro: 10 },
-            { id: 'huel', time: '13:00', label: 'Huel + Collagen', sub: 'Multi Essentials', icon: '🥤', kcal: 440, pro: 50 },
-            { id: 'dinner', time: '17:30', label: 'Dinner (Lean)', sub: 'Green List Only', icon: '🍽️', kcal: 0, pro: 0 },
+            { id: 'lmnt', time: '11:00', label: 'LMNT + Collagen', sub: '1g Sodium • 10g Pro', icon: '💧', kcal: 40, pro: 10 },
+            { id: 'huel', time: '13:00', label: 'Huel + Collagen', sub: 'Essential Nutrition', icon: '🥤', kcal: 440, pro: 50 },
+            { id: 'dinner', time: '17:30', label: 'Dinner (Lean)', sub: 'Gemini AI Scan', icon: '🍽️', kcal: 0, pro: 0 },
             { id: 'magnesium', time: '21:00', label: 'Magnesium', sub: 'Recovery/Sleep', icon: '🌙', kcal: 0, pro: 0 }
         ];
 
         const App = () => {
             const [checks, setChecks] = useState(new Array(6).fill(false));
-            const [loading, setLoading] = useState(false);
             const [weight, setWeight] = useState("--.-");
+            const [loading, setLoading] = useState(true);
+            const [scanning, setScanning] = useState(false);
 
-            // Load current status from Google Sheet
             useEffect(() => {
-                fetch(SCRIPT_URL)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.checks) setChecks(data.checks);
-                        if (data.latestWeight) setWeight(data.latestWeight);
-                    })
-                    .catch(err => console.log("Offline Mode"));
+                fetchData();
             }, []);
 
-            const handleToggle = (index, id) => {
+            const fetchData = async () => {
+                try {
+                    const res = await fetch(SCRIPT_URL);
+                    const data = await res.json();
+                    if (data.checks) setChecks(data.checks);
+                    if (data.latestWeight) setWeight(data.latestWeight);
+                } catch (e) { console.error("Sync Error"); }
+                setLoading(false);
+            };
+
+            const handleToggle = async (index, id) => {
                 const newChecks = [...checks];
                 newChecks[index] = !newChecks[index];
                 setChecks(newChecks);
-
-                fetch(SCRIPT_URL, {
+                
+                await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // Essential for Google Apps Script
+                    mode: 'no-cors',
                     body: JSON.stringify({ id: id, value: newChecks[index] })
                 });
             };
 
-            const totals = ROUTINE.reduce((acc, item, i) => {
+            const handleCamera = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                setScanning(true);
+
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64String = reader.result.split(',')[1];
+                    try {
+                        await fetch(SCRIPT_URL, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            body: JSON.stringify({ action: "analyze", image: base64String })
+                        });
+                        setTimeout(fetchData, 3000); // Wait for AI to write to sheet
+                    } catch (e) { alert("Scan Failed"); }
+                    setScanning(false);
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const totals = PROTOCOL.reduce((acc, item, i) => {
                 if (checks[i]) {
                     acc.kcal += item.kcal;
                     acc.pro += item.pro;
@@ -68,65 +92,82 @@
                 return acc;
             }, { kcal: 0, pro: 0 });
 
+            if (loading) return <div className="flex h-screen items-center justify-center text-blue-500 font-black italic">LOADING OS...</div>;
+
             return (
-                <div className="max-w-md mx-auto p-5 pb-24">
+                <div className="max-w-md mx-auto h-screen flex flex-col p-5">
+                    {/* Header */}
                     <header className="flex justify-between items-end mb-6 pt-4">
                         <div>
-                            <h1 className="text-2xl font-black italic tracking-tighter">HEALTH OS</h1>
-                            <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">Protocol 2026</p>
+                            <h1 className="text-2xl font-black italic tracking-tighter leading-none">HEALTH OS</h1>
+                            <p className="text-[10px] text-blue-500 font-bold uppercase tracking-[0.2em]">Protocol 2026</p>
                         </div>
                         <div className="text-right">
-                            <span className="text-2xl font-black italic text-white">{weight}</span>
-                            <span className="text-[10px] text-slate-500 font-bold ml-1">KG</span>
+                            <span className="text-2xl font-black italic">{weight}</span>
+                            <span className="text-[10px] text-slate-500 font-bold ml-1 uppercase">KG</span>
                         </div>
                     </header>
 
-                    {/* Progress bars */}
-                    <div className="grid grid-cols-2 gap-3 mb-8">
-                        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-2xl">
+                    {/* Compact Progress */}
+                    <div className="grid grid-cols-2 gap-2 mb-6">
+                        <div className="bg-slate-900/40 border border-slate-800 p-3 rounded-2xl">
                             <div className="flex justify-between text-[9px] font-black uppercase text-slate-500 mb-1">
                                 <span>Energy</span>
-                                <span className="text-blue-400">{totals.kcal}/1300</span>
+                                <span className={totals.kcal > 1300 ? "text-red-400" : "text-blue-400"}>{totals.kcal}/1300</span>
                             </div>
                             <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 transition-all" style={{width: `${(totals.kcal/1300)*100}%`}}></div>
+                                <div className="h-full bg-blue-500 transition-all duration-700" style={{width: `${Math.min((totals.kcal/1300)*100, 100)}%`}}></div>
                             </div>
                         </div>
-                        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-2xl">
+                        <div className="bg-slate-900/40 border border-slate-800 p-3 rounded-2xl">
                             <div className="flex justify-between text-[9px] font-black uppercase text-slate-500 mb-1">
                                 <span>Protein</span>
                                 <span className="text-emerald-400">{totals.pro}g/140g</span>
                             </div>
                             <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-500 transition-all" style={{width: `${(totals.pro/140)*100}%`}}></div>
+                                <div className="h-full bg-emerald-500 transition-all duration-700" style={{width: `${Math.min((totals.pro/140)*100, 100)}%`}}></div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Routine Items */}
-                    <div className="space-y-2">
-                        {ROUTINE.map((item, i) => (
+                    {/* Routine List - Zero Scroll Optimization */}
+                    <div className="flex-1 space-y-1.5 overflow-hidden">
+                        {PROTOCOL.map((item, i) => (
                             <div 
                                 key={item.id} 
                                 onClick={() => handleToggle(i, item.id)}
-                                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] ${checks[i] ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-slate-900 border-slate-800'}`}
+                                className={`flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-[0.97] ${checks[i] ? 'bg-emerald-500/5 border-emerald-500/20 active-glow' : 'bg-slate-900/40 border-slate-800'}`}
                             >
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${checks[i] ? 'bg-emerald-500/20' : 'bg-slate-800'}`}>
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${checks[i] ? 'bg-emerald-500/20' : 'bg-slate-800'}`}>
                                     {item.icon}
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <span className={`text-[10px] font-black italic ${checks[i] ? 'text-emerald-500' : 'text-blue-500'}`}>{item.time}</span>
-                                        <h3 className={`text-sm font-bold ${checks[i] ? 'text-slate-400' : 'text-white'}`}>{item.label}</h3>
+                                        <h3 className={`text-sm font-bold ${checks[i] ? 'text-slate-500' : 'text-white'}`}>{item.label}</h3>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 font-medium">{item.sub}</p>
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">{item.sub}</p>
                                 </div>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${checks[i] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-800'}`}>
-                                    {checks[i] && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${checks[i] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-700'}`}>
+                                    {checks[i] && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
                                 </div>
                             </div>
                         ))}
                     </div>
+
+                    {/* AI Scan Button */}
+                    <label className={`fixed bottom-24 right-6 w-14 h-14 bg-blue-600 rounded-full shadow-2xl flex items-center justify-center text-white cursor-pointer active:scale-90 transition-all z-50 border-4 border-slate-950 ${scanning ? 'loading-pulse bg-emerald-600' : ''}`}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+                        </svg>
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCamera} disabled={scanning} />
+                    </label>
+
+                    {/* Bottom Nav Spacer */}
+                    <nav className="h-20 flex justify-around items-center px-10">
+                        <div className="text-blue-500 opacity-100"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+                        <div className="text-slate-600 opacity-50"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                    </nav>
                 </div>
             );
         };
